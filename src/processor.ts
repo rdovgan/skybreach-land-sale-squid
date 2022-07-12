@@ -43,18 +43,37 @@ processor.run(database, async (ctx) => {
   for (const block of ctx.blocks) {
     for (const item of block.items) {
       if (item.name === 'EVM.Log') {
-        const primarySales = await handlePrimarySaleEvents(ctx, block.header, item.event);
+        /*
+         * See if this block has event for primary sales. Where RMRK sells the land
+         * This event has no price field unfortunately so we can't easily find out how much it was purchased for here.
+         */
+        const primarySales = await handlePrimarySaleEvents(ctx, block.header, item.event as EvmLogEvent);
         landSales = landSales.concat(primarySales.landSales);
         plotEntities = plotEntities.concat(primarySales.plotEntities);
-        const secondarySales = await handleSecondarySaleEvents(ctx, block.header, item.event, plotEntities);
+
+        /*
+         * See if this block has events for secondary sales. Where users trade land between each other
+         */
+        const secondarySales = await handleSecondarySaleEvents(ctx, block.header, item.event as EvmLogEvent, plotEntities);
         plotEntities = secondarySales.plotEntities;
         landSales = landSales.concat(secondarySales.landSales);
-        plotEntities = await handleLandTransferEvents(ctx, block.header, item.event, plotEntities);
-        const offers = await handleOfferMadeEvents(ctx, block.header, item.event, plotEntities);
+
+        /*
+         * See if this block has events for transferring land plots to other account
+         */
+        plotEntities = await handleLandTransferEvents(ctx, block.header, item.event as EvmLogEvent, plotEntities);
+
+        /*
+         * See if this block has events for making a buy offer on this land plot
+         */
+        const offers = await handleOfferMadeEvents(ctx, block.header, item.event as EvmLogEvent, plotEntities);
         plotEntities = offers.plotEntities;
         plotOffers = offers.offers;
 
-        const offerToRemove = await handleOfferCancelledEvents(ctx, block.header, item.event);
+        /*
+         * See if this block has events for cancelling a buy offer on this land plot
+         */
+        const offerToRemove = await handleOfferCancelledEvents(ctx, block.header, item.event as EvmLogEvent);
         if (offerToRemove) {
           offersToRemove.push(offerToRemove);
         }
