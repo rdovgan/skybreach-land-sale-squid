@@ -8,11 +8,9 @@ import {
   SubstrateBlock,
 } from '@subsquid/substrate-processor';
 import { AddressZero } from '@ethersproject/constants';
-import { In } from 'typeorm';
 import { CHAIN_NODE, contract } from './contract';
 import { LandSale, Plot, PlotOffer } from './model';
 import * as landSalesAbi from './abi/landSales';
-import * as landSalesContract from './contract';
 
 const database = new TypeormDatabase();
 const processor = new SubstrateBatchProcessor()
