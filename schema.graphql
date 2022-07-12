@@ -1,31 +1,29 @@
-type Token @entity {
+type PlotOffer @entity {
   id: ID!
-  owner: Owner
-  uri: String
-  transfers: [Transfer!]! @derivedFrom(field: "token")
-  contract: Contract
+  plot: Plot!
+  buyer: String! @index
+  txnHash: String! @index
+  createdAt: DateTime! @index
+  blockNumber: Int!
+  price: Float!
 }
 
-type Owner @entity {
+type LandSale @entity {
   id: ID!
-  ownedTokens: [Token!]! @derivedFrom(field: "owner")
-  balance: BigInt
+  plot: Plot!
+  buyer: String! @index
+  seller: String! @index
+  price: Float!
+  referrer: String!
+  boughtWithCredits: Boolean!
+  txnHash: String! @index
+  createdAt: DateTime! @index
+  blockNumber: Int!
 }
 
-type Contract @entity {
+type Plot @entity {
   id: ID!
-  name: String
-  symbol: String
-  totalSupply: BigInt
-  mintedTokens: [Token!]! @derivedFrom(field: "contract")
-}
-
-type Transfer @entity {
-  id: ID!
-  token: Token!
-  from: Owner
-  to: Owner
-  timestamp: BigInt!
-  block: Int!
-  transactionHash: String!
+  owner: String! @index
+  sales: [LandSale!]  @derivedFrom(field: "plot")
+  offers: [PlotOffer!]  @derivedFrom(field: "plot")
 }
