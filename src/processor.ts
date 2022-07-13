@@ -21,9 +21,9 @@ import {
   PlotTransferred0Event,
 } from './abi/landSales';
 
-const contractOld = '0x98af019cdf16990130cba555861046b02e9898cc';
-const contractNew = '0x913a3e067a559ba24a7a06a6cdea4837eeeaf72d';
-const contractXcRMRK = '0xffffffFF893264794d9d57E1E0E21E0042aF5A0A';
+const contractOld = '0x98af019cdf16990130cba555861046b02e9898cc'.toLowerCase();
+const contractNew = '0x913a3e067a559ba24a7a06a6cdea4837eeeaf72d'.toLowerCase();
+const contractXcRMRK = '0xffffffff893264794d9d57e1e0e21e0042af5a0a'.toLowerCase();
 
 const LAND_SALE_EVENTS = {
   primarySale: landSalesAbi.events['PlotsBought(uint256[],address,address,bool)'],
@@ -76,7 +76,6 @@ async function processBatches(ctx: Context) {
 
         if (topic === XCRMRK_TRANSFER_EVENT.topic) {
           const { value } = XCRMRK_TRANSFER_EVENT.decode(item.event.args);
-          ctx.log.info(`${item.event.evmTxHash} ${value.toString()}`);
 
           if (!xcRmrkTransferValues[item.event.evmTxHash]) {
             xcRmrkTransferValues[item.event.evmTxHash] = BigNumber.from(0);
