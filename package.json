@@ -1,5 +1,5 @@
 {
-  "name": "kusama-balances",
+  "name": "skybreach-landsales",
   "private": true,
   "scripts": {
     "build": "rm -rf lib && tsc",
