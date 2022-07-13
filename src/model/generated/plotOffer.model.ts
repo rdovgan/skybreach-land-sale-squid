@@ -26,9 +26,6 @@ export class PlotOffer {
   @Column_("timestamp with time zone", {nullable: false})
   createdAt!: Date
 
-  @Column_("int4", {nullable: false})
-  blockNumber!: number
-
   @Column_("numeric", {nullable: false})
   price!: number
 }

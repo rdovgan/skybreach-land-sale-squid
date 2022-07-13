@@ -4,7 +4,6 @@ type PlotOffer @entity {
   buyer: String! @index
   txnHash: String! @index
   createdAt: DateTime! @index
-  blockNumber: Int!
   price: Float!
 }
 
@@ -18,7 +17,6 @@ type LandSale @entity {
   boughtWithCredits: Boolean!
   txnHash: String! @index
   createdAt: DateTime! @index
-  blockNumber: Int!
 }
 
 type Plot @entity {

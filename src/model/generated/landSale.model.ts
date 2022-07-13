@@ -38,7 +38,4 @@ export class LandSale {
   @Index_()
   @Column_("timestamp with time zone", {nullable: false})
   createdAt!: Date
-
-  @Column_("int4", {nullable: false})
-  blockNumber!: number
 }
