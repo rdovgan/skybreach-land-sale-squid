@@ -1,27 +1,27 @@
-FROM node:16.10.0 AS node
+FROM node:16-alpine AS node
 
 FROM node AS node-with-gyp
-RUN apk add g++ make python3
+RUN apk add --no-cache --virtual .build-deps alpine-sdk python3
 
 FROM node-with-gyp AS builder
 WORKDIR /squid
 ADD package.json .
-ADD package-lock.json .
-RUN npm ci
+ADD yarn.lock .
+RUN yarn install
 ADD tsconfig.json .
 ADD src src
-RUN npm run build
+RUN yarn build
 
 FROM node-with-gyp AS deps
 WORKDIR /squid
 ADD package.json .
-ADD package-lock.json .
-RUN npm ci --production
+ADD yarn.lock .
+RUN yarn install
 
 FROM node AS squid
 WORKDIR /squid
 COPY --from=deps /squid/package.json .
-COPY --from=deps /squid/package-lock.json .
+COPY --from=deps /squid/yarn.lock .
 COPY --from=deps /squid/node_modules node_modules
 COPY --from=builder /squid/lib lib
 ADD db db
@@ -33,8 +33,8 @@ EXPOSE 4000
 
 
 FROM squid AS processor
-CMD ["npm", "run", "processor:start"]
+CMD ["yarn", "processor:start"]
 
 
 FROM squid AS query-node
-CMD ["npm", "run", "query-node:start"]
+CMD ["yarn", "query-node:start"]
