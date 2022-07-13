@@ -4,7 +4,7 @@ type PlotOffer @entity {
   buyer: String! @index
   txnHash: String! @index
   createdAt: DateTime! @index
-  price: Float!
+  price: BigInt!
 }
 
 type LandSale @entity {
@@ -12,7 +12,7 @@ type LandSale @entity {
   plot: Plot!
   buyer: String! @index
   seller: String! @index
-  price: Float!
+  price: BigInt!
   referrer: String!
   boughtWithCredits: Boolean!
   txnHash: String! @index

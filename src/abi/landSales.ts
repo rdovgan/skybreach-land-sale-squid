@@ -72,9 +72,9 @@ export const events = {
     topic: abi.getEventTopic("EscrowReturned(address,uint256)"),
     decode(data: EvmEvent): EscrowReturned0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("EscrowReturned(address,uint256)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("EscrowReturned(address,uint256)"),
+          data.data || "",
+          data.topics
       );
       return  {
         buyer: result[0],
@@ -87,9 +87,9 @@ export const events = {
     topic: abi.getEventTopic("OfferCancelled(uint256,address,uint256)"),
     decode(data: EvmEvent): OfferCancelled0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("OfferCancelled(uint256,address,uint256)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("OfferCancelled(uint256,address,uint256)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotId: result[0],
@@ -103,9 +103,9 @@ export const events = {
     topic: abi.getEventTopic("OfferMade(uint256,address,uint256)"),
     decode(data: EvmEvent): OfferMade0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("OfferMade(uint256,address,uint256)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("OfferMade(uint256,address,uint256)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotId: result[0],
@@ -119,9 +119,9 @@ export const events = {
     topic: abi.getEventTopic("PlotDelisted(uint256,address)"),
     decode(data: EvmEvent): PlotDelisted0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("PlotDelisted(uint256,address)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("PlotDelisted(uint256,address)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotId: result[0],
@@ -134,9 +134,9 @@ export const events = {
     topic: abi.getEventTopic("PlotListed(uint256,address,uint256)"),
     decode(data: EvmEvent): PlotListed0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("PlotListed(uint256,address,uint256)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("PlotListed(uint256,address,uint256)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotId: result[0],
@@ -150,9 +150,9 @@ export const events = {
     topic: abi.getEventTopic("PlotPriceChanged(uint256,address,uint256,uint256)"),
     decode(data: EvmEvent): PlotPriceChanged0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("PlotPriceChanged(uint256,address,uint256,uint256)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("PlotPriceChanged(uint256,address,uint256,uint256)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotId: result[0],
@@ -167,9 +167,9 @@ export const events = {
     topic: abi.getEventTopic("PlotPurchased(uint256,address,address,uint256)"),
     decode(data: EvmEvent): PlotPurchased0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("PlotPurchased(uint256,address,address,uint256)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("PlotPurchased(uint256,address,address,uint256)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotId: result[0],
@@ -184,9 +184,9 @@ export const events = {
     topic: abi.getEventTopic("PlotResourceSet(uint256,string)"),
     decode(data: EvmEvent): PlotResourceSet0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("PlotResourceSet(uint256,string)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("PlotResourceSet(uint256,string)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotId: result[0],
@@ -199,9 +199,9 @@ export const events = {
     topic: abi.getEventTopic("PlotTransferred(uint256,address,address)"),
     decode(data: EvmEvent): PlotTransferred0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("PlotTransferred(uint256,address,address)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("PlotTransferred(uint256,address,address)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotIds: result[0],
@@ -215,9 +215,9 @@ export const events = {
     topic: abi.getEventTopic("PlotsBought(uint256[],address,address,bool)"),
     decode(data: EvmEvent): PlotsBought0Event {
       const result = abi.decodeEventLog(
-        abi.getEvent("PlotsBought(uint256[],address,address,bool)"),
-        data.data || "",
-        data.topics
+          abi.getEvent("PlotsBought(uint256[],address,address,bool)"),
+          data.data || "",
+          data.topics
       );
       return  {
         plotIds: result[0],

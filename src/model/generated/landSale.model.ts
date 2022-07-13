@@ -1,4 +1,5 @@
 import {Entity as Entity_, Column as Column_, PrimaryColumn as PrimaryColumn_, ManyToOne as ManyToOne_, Index as Index_} from "typeorm"
+import * as marshal from "./marshal"
 import {Plot} from "./plot.model"
 
 @Entity_()
@@ -22,8 +23,8 @@ export class LandSale {
   @Column_("text", {nullable: false})
   seller!: string
 
-  @Column_("numeric", {nullable: false})
-  price!: number
+  @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: false})
+  price!: bigint
 
   @Column_("text", {nullable: false})
   referrer!: string

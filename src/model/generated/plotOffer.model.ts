@@ -1,4 +1,5 @@
 import {Entity as Entity_, Column as Column_, PrimaryColumn as PrimaryColumn_, ManyToOne as ManyToOne_, Index as Index_} from "typeorm"
+import * as marshal from "./marshal"
 import {Plot} from "./plot.model"
 
 @Entity_()
@@ -26,6 +27,6 @@ export class PlotOffer {
   @Column_("timestamp with time zone", {nullable: false})
   createdAt!: Date
 
-  @Column_("numeric", {nullable: false})
-  price!: number
+  @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: false})
+  price!: bigint
 }

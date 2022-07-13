@@ -1,3 +1,4 @@
+import { BigNumber } from 'ethers';
 import { lookupArchive } from '@subsquid/archive-registry';
 import { Store, TypeormDatabase } from '@subsquid/typeorm-store';
 import {
@@ -5,12 +6,42 @@ import {
   BatchProcessorItem,
   EvmLogEvent,
   SubstrateBatchProcessor,
-  SubstrateBlock,
 } from '@subsquid/substrate-processor';
 import { AddressZero } from '@ethersproject/constants';
-import { CHAIN_NODE, contract } from './contract';
+import { CHAIN_NODE } from './contract';
 import { LandSale, Plot, PlotOffer } from './model';
 import * as landSalesAbi from './abi/landSales';
+import * as landSalesOldAbi from './abi/landSaleOld';
+import * as xcRMRKAbi from './abi/xcRMRK';
+import {
+  OfferCancelled0Event,
+  OfferMade0Event,
+  PlotPurchased0Event,
+  PlotsBought0Event,
+  PlotTransferred0Event,
+} from './abi/landSales';
+
+const contractOld = '0x98af019cdf16990130cba555861046b02e9898cc';
+const contractNew = '0x913a3e067a559ba24a7a06a6cdea4837eeeaf72d';
+const contractXcRMRK = '0xffffffFF893264794d9d57E1E0E21E0042aF5A0A';
+
+const LAND_SALE_EVENTS = {
+  primarySale: landSalesAbi.events['PlotsBought(uint256[],address,address,bool)'],
+  secondarySale: landSalesAbi.events['PlotPurchased(uint256,address,address,uint256)'],
+  plotTransfer: landSalesAbi.events['PlotTransferred(uint256,address,address)'],
+  offerMade: landSalesAbi.events['OfferMade(uint256,address,uint256)'],
+  offerCancelled: landSalesAbi.events['OfferCancelled(uint256,address,uint256)'],
+};
+
+const LAND_SALE_EVENTS_OLD = {
+  primarySale: landSalesOldAbi.events['PlotsBought(uint256[],address,address,bool)'],
+  secondarySale: landSalesOldAbi.events['PlotPurchased(uint256,address,address,uint256)'],
+  plotTransfer: landSalesOldAbi.events['PlotTransferred(uint256,address,address)'],
+  offerMade: landSalesOldAbi.events['OfferMade(uint256,address,uint256)'],
+  offerCancelled: landSalesOldAbi.events['OfferCancelled(uint256,address,uint256)'],
+};
+
+const XCRMRK_TRANSFER_EVENT = xcRMRKAbi.events['Transfer(address,address,uint256)'];
 
 const database = new TypeormDatabase();
 const processor = new SubstrateBatchProcessor()
@@ -21,92 +52,166 @@ const processor = new SubstrateBatchProcessor()
     archive: lookupArchive('moonriver', { release: 'FireSquid' }),
   })
   .setTypesBundle('moonbeam')
-  .addEvmLog(contract.address, {
-    filter: [
-      landSalesAbi.events['PlotsBought(uint256[],address,address,bool)'].topic,
-      landSalesAbi.events['PlotPurchased(uint256,address,address,uint256)'].topic,
-      landSalesAbi.events['OfferMade(uint256,address,uint256)'].topic,
-      landSalesAbi.events['OfferCancelled(uint256,address,uint256)'].topic,
-      landSalesAbi.events['PlotTransferred(uint256,address,address)'].topic,
-    ],
+  .addEvmLog(contractOld, {
+    filter: [Object.values(LAND_SALE_EVENTS_OLD).map((event) => event.topic)],
+  })
+  .addEvmLog(contractNew, {
+    filter: [Object.values(LAND_SALE_EVENTS).map((event) => event.topic)],
+  })
+  .addEvmLog(contractXcRMRK, {
+    filter: [XCRMRK_TRANSFER_EVENT.topic],
   });
 
 type Item = BatchProcessorItem<typeof processor>;
 type Context = BatchContext<Store, Item>;
 
-processor.run(database, async (ctx) => {
-  let landSales: LandSale[] = [];
-  let plotEntities: Plot[] = [];
-  let plotOffers: PlotOffer[] = [];
-  const offersToRemove: PlotOffer[] = [];
+async function processBatches(ctx: Context) {
+  const xcRmrkTransferValues: Record<string, BigNumber> = {};
+  const landSaleEvents: EvmLogEvent[] = [];
 
   for (const block of ctx.blocks) {
     for (const item of block.items) {
       if (item.name === 'EVM.Log') {
-        /*
-         * See if this block has event for primary sales. Where RMRK sells the land
-         * This event has no price field unfortunately so we can't easily find out how much it was purchased for here.
-         */
-        const primarySales = await handlePrimarySaleEvents(ctx, block.header, item.event as EvmLogEvent);
-        landSales = landSales.concat(primarySales.landSales);
-        plotEntities = plotEntities.concat(primarySales.plotEntities);
+        const topic = item.event.args.topics[0];
 
-        /*
-         * See if this block has events for secondary sales. Where users trade land between each other
-         */
-        const secondarySales = await handleSecondarySaleEvents(ctx, block.header, item.event as EvmLogEvent, plotEntities);
-        plotEntities = secondarySales.plotEntities;
-        landSales = landSales.concat(secondarySales.landSales);
+        if (topic === XCRMRK_TRANSFER_EVENT.topic) {
+          const { value } = XCRMRK_TRANSFER_EVENT.decode(item.event.args);
+          ctx.log.info(`${item.event.evmTxHash} ${value.toString()}`);
 
-        /*
-         * See if this block has events for transferring land plots to other account
-         */
-        plotEntities = await handleLandTransferEvents(ctx, block.header, item.event as EvmLogEvent, plotEntities);
+          if (!xcRmrkTransferValues[item.event.evmTxHash]) {
+            xcRmrkTransferValues[item.event.evmTxHash] = BigNumber.from(0);
+          }
 
-        /*
-         * See if this block has events for making a buy offer on this land plot
-         */
-        const offers = await handleOfferMadeEvents(ctx, block.header, item.event as EvmLogEvent, plotEntities);
-        plotEntities = offers.plotEntities;
-        plotOffers = offers.offers;
-
-        /*
-         * See if this block has events for cancelling a buy offer on this land plot
-         */
-        const offerToRemove = await handleOfferCancelledEvents(ctx, block.header, item.event as EvmLogEvent);
-        if (offerToRemove) {
-          offersToRemove.push(offerToRemove);
+          xcRmrkTransferValues[item.event.evmTxHash] =
+            xcRmrkTransferValues[item.event.evmTxHash].add(value);
         }
-        const offerToRemoveIndex = plotOffers.findIndex(offer => offer.id === offerToRemove.id);
 
-        if (offerToRemoveIndex > -1) {
-          plotOffers.splice(offerToRemoveIndex, 1);
+        if (
+          Object.values(LAND_SALE_EVENTS)
+            .map((event) => event.topic)
+            .includes(topic) ||
+          Object.values(LAND_SALE_EVENTS_OLD)
+            .map((event) => event.topic)
+            .includes(topic)
+        ) {
+          landSaleEvents.push(item.event);
         }
       }
     }
   }
 
-  await ctx.store.save(landSales);
+  await saveEntities(ctx, landSaleEvents, xcRmrkTransferValues);
+}
+
+const saveEntities = async (
+  ctx: Context,
+  landSaleEvents: EvmLogEvent[],
+  xcRmrkTransferEvents: Record<string, BigNumber>,
+) => {
+  let landSales: LandSale[] = [];
+  let plotEntities: Plot[] = [];
+  let plotOffers: PlotOffer[] = [];
+  const offersToRemove: PlotOffer[] = [];
+
+  for (const landSaleEvent of landSaleEvents) {
+    const topic = landSaleEvent.args.topics[0];
+
+    const tokenTransferValue = xcRmrkTransferEvents[landSaleEvent.evmTxHash];
+
+    const primarySalesEventMatch = [
+      LAND_SALE_EVENTS.primarySale,
+      LAND_SALE_EVENTS_OLD.primarySale,
+    ].find((primarySaleTopics) => primarySaleTopics.topic === topic);
+    if (primarySalesEventMatch) {
+      const primarySalesEvent = primarySalesEventMatch.decode(landSaleEvent.args);
+      const primarySales = await handlePrimarySaleEvents(
+        ctx,
+        primarySalesEvent,
+        landSaleEvent,
+        tokenTransferValue || BigNumber.from(0),
+      );
+      landSales = landSales.concat(primarySales.landSales);
+      plotEntities = plotEntities.concat(primarySales.plotEntities);
+    }
+
+    const secondarySaleEventMatch = [
+      LAND_SALE_EVENTS.secondarySale,
+      LAND_SALE_EVENTS_OLD.secondarySale,
+    ].find((secondarySaleTopics) => secondarySaleTopics.topic === topic);
+    if (secondarySaleEventMatch) {
+      const secondarySalesEvent = secondarySaleEventMatch.decode(landSaleEvent.args);
+      const secondarySales = await handleSecondarySaleEvents(
+        ctx,
+        secondarySalesEvent,
+        landSaleEvent,
+        plotEntities,
+      );
+      plotEntities = secondarySales.plotEntities;
+      landSales = landSales.concat(secondarySales.landSales);
+    }
+
+    const plotTransferEventMatch = [
+      LAND_SALE_EVENTS.plotTransfer,
+      LAND_SALE_EVENTS_OLD.plotTransfer,
+    ].find((plotTransferTopics) => plotTransferTopics.topic === topic);
+    if (plotTransferEventMatch) {
+      const plotTransferEvent = plotTransferEventMatch.decode(landSaleEvent.args);
+      plotEntities = await handleLandTransferEvents(
+        ctx,
+        plotTransferEvent,
+        landSaleEvent,
+        plotEntities,
+      );
+    }
+
+    const offerMadeEventMatch = [LAND_SALE_EVENTS.offerMade, LAND_SALE_EVENTS_OLD.offerMade].find(
+      (offerMadeTopics) => offerMadeTopics.topic === topic,
+    );
+    if (offerMadeEventMatch) {
+      const offerMadeEvent = offerMadeEventMatch.decode(landSaleEvent.args);
+      const offers = await handleOfferMadeEvents(ctx, offerMadeEvent, landSaleEvent, plotEntities);
+      plotEntities = offers.plotEntities;
+      plotOffers = plotOffers.concat(offers.offers);
+    }
+
+    const offerCancelledEventMatch = [
+      LAND_SALE_EVENTS.offerCancelled,
+      LAND_SALE_EVENTS_OLD.offerCancelled,
+    ].find((offerCancelledTopics) => offerCancelledTopics.topic === topic);
+    if (offerCancelledEventMatch) {
+      const offerCancelledEvent = offerCancelledEventMatch.decode(landSaleEvent.args);
+      const offerToRemove = await handleOfferCancelledEvents(ctx, offerCancelledEvent);
+      if (offerToRemove) {
+        offersToRemove.push(offerToRemove);
+      }
+      const offerToRemoveIndex = plotOffers.findIndex((offer) => offer.id === offerToRemove.id);
+
+      if (offerToRemoveIndex > -1) {
+        plotOffers.splice(offerToRemoveIndex, 1);
+      }
+    }
+  }
+
   await ctx.store.save(plotEntities);
+  await ctx.store.save(landSales);
   await ctx.store.save(plotOffers);
-  await ctx.store.remove(offersToRemove)
-});
+  await ctx.store.remove(offersToRemove);
+};
 
 const handlePrimarySaleEvents = async (
   ctx: Context,
-  block: SubstrateBlock,
+  primarySalesEvent: PlotsBought0Event,
   event: EvmLogEvent,
+  tokenTransferValue: BigNumber,
 ): Promise<{ landSales: LandSale[]; plotEntities: Plot[] }> => {
-  const { boughtWithCredits, buyer, referrer, plotIds } = landSalesAbi.events[
-    'PlotsBought(uint256[],address,address,bool)'
-  ].decode(event.args);
+  const { boughtWithCredits, buyer, referrer, plotIds } = primarySalesEvent;
 
   const { store } = ctx;
   const landSales: LandSale[] = [];
   const plotEntities: Plot[] = [];
 
   for (const plotId of plotIds) {
-    const plotIdStr = String(plotId);
+    const plotIdStr = plotId.toString();
     let plot = await store.get(Plot, plotIdStr);
     if (!plot) {
       plot = new Plot({
@@ -123,6 +228,7 @@ const handlePrimarySaleEvents = async (
       buyer,
       seller: AddressZero,
       referrer: referrer || AddressZero,
+      price: boughtWithCredits ? BigInt(0) : tokenTransferValue.toBigInt(),
       boughtWithCredits,
       txnHash: event.evmTxHash,
       createdAt: new Date(),
@@ -136,18 +242,16 @@ const handlePrimarySaleEvents = async (
 
 const handleSecondarySaleEvents = async (
   ctx: Context,
-  block: SubstrateBlock,
+  secondarySalesEvent: PlotPurchased0Event,
   event: EvmLogEvent,
   plotEntities: Plot[],
 ): Promise<{ landSales: LandSale[]; plotEntities: Plot[] }> => {
-  const { seller, buyer, price, plotId } = landSalesAbi.events[
-    'PlotPurchased(uint256,address,address,uint256)'
-  ].decode(event.args);
+  const { seller, buyer, price, plotId } = secondarySalesEvent;
 
   const { store } = ctx;
   const landSales: LandSale[] = [];
 
-  const plotIdStr = String(plotId);
+  const plotIdStr = plotId.toString();
   const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
 
   const plot: Plot =
@@ -163,7 +267,7 @@ const handleSecondarySaleEvents = async (
     id: `${plotIdStr}-${event.evmTxHash}`,
     plot,
     buyer,
-    price: price.toNumber(),
+    price: price.toBigInt(),
     seller,
     referrer: AddressZero,
     boughtWithCredits: false,
@@ -184,18 +288,16 @@ const handleSecondarySaleEvents = async (
 
 const handleOfferMadeEvents = async (
   ctx: Context,
-  block: SubstrateBlock,
+  offerMadeEvent: OfferMade0Event,
   event: EvmLogEvent,
   plotEntities: Plot[],
 ): Promise<{ offers: PlotOffer[]; plotEntities: Plot[] }> => {
-  const { plotId, price, buyer } = landSalesAbi.events['OfferMade(uint256,address,uint256)'].decode(
-    event.args,
-  );
+  const { plotId, price, buyer } = offerMadeEvent;
 
   const { store } = ctx;
   const offers: PlotOffer[] = [];
 
-  const plotIdStr = String(plotId);
+  const plotIdStr = plotId.toString();
   const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
 
   const plot: Plot =
@@ -208,7 +310,7 @@ const handleOfferMadeEvents = async (
 
   const offer = new PlotOffer({
     id: `${plotIdStr}-${buyer}-${price.toString()}`,
-    price: price.toNumber(),
+    price: price.toBigInt(),
     plot,
     buyer,
     txnHash: event.evmTxHash,
@@ -227,32 +329,28 @@ const handleOfferMadeEvents = async (
 };
 
 const handleOfferCancelledEvents = async (
-    ctx: Context,
-    block: SubstrateBlock,
-    event: EvmLogEvent,
+  ctx: Context,
+  offerCancelledEvent: OfferCancelled0Event,
 ): Promise<PlotOffer> => {
-  const { plotId, price, buyer } = landSalesAbi.events['OfferCancelled(uint256,address,uint256)'].decode(
-      event.args,
-  );
+  const { plotId, price, buyer } = offerCancelledEvent;
   const plotIdStr = String(plotId);
-  const offerId = `${plotIdStr}-${buyer}-${price.toString()}`
+  const offerId = `${plotIdStr}-${buyer}-${price.toString()}`;
   const existingOffer = await ctx.store.get(PlotOffer, offerId);
-  return existingOffer || new PlotOffer({
-    id: offerId
-  })
+  return (
+    existingOffer ||
+    new PlotOffer({
+      id: offerId,
+    })
+  );
 };
 
 const handleLandTransferEvents = async (
   ctx: Context,
-  block: SubstrateBlock,
+  plotTransferEvent: PlotTransferred0Event,
   event: EvmLogEvent,
   plotEntities: Plot[],
 ): Promise<Plot[]> => {
-  const {
-    plotIds: plotId,
-    oldOwner,
-    newOwner,
-  } = landSalesAbi.events['PlotTransferred(uint256,address,address)'].decode(event.args);
+  const { plotIds: plotId, newOwner } = plotTransferEvent;
 
   const { store } = ctx;
 
@@ -278,3 +376,5 @@ const handleLandTransferEvents = async (
 
   return plotEntities;
 };
+
+processor.run(database, processBatches);
