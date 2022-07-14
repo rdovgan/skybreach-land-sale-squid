@@ -18,6 +18,7 @@ import {
   OfferMade0Event,
   PlotDelisted0Event,
   PlotListed0Event,
+  PlotPriceChanged0Event,
   PlotPurchased0Event,
   PlotsBought0Event,
   PlotTransferred0Event,
@@ -35,6 +36,7 @@ const LAND_SALE_EVENTS = {
   offerCancelled: landSalesAbi.events['OfferCancelled(uint256,address,uint256)'],
   plotListedForSale: landSalesAbi.events['PlotListed(uint256,address,uint256)'],
   plotDeListedForSale: landSalesAbi.events['PlotDelisted(uint256,address)'],
+  plotPriceChanged: landSalesAbi.events['PlotPriceChanged(uint256,address,uint256,uint256)'],
 };
 
 const LAND_SALE_EVENTS_OLD = {
@@ -45,6 +47,7 @@ const LAND_SALE_EVENTS_OLD = {
   offerCancelled: landSalesOldAbi.events['OfferCancelled(uint256,address,uint256)'],
   plotListedForSale: landSalesAbi.events['PlotListed(uint256,address,uint256)'],
   plotDeListedForSale: landSalesAbi.events['PlotDelisted(uint256,address)'],
+  plotPriceChanged: landSalesAbi.events['PlotPriceChanged(uint256,address,uint256,uint256)'],
 };
 
 const XCRMRK_TRANSFER_EVENT = xcRMRKAbi.events['Transfer(address,address,uint256)'];
@@ -219,6 +222,20 @@ const saveEntities = async (
       plotEntities = await handlePlotListedEvents(
         ctx,
         plotDeListedEvent,
+        landSaleEvent,
+        plotEntities,
+      );
+    }
+
+    const plotPriceChangedEventMatch = [
+      LAND_SALE_EVENTS.plotPriceChanged,
+      LAND_SALE_EVENTS_OLD.plotPriceChanged,
+    ].find((plotPriceChangedTopics) => plotPriceChangedTopics.topic === topic);
+    if (plotPriceChangedEventMatch) {
+      const plotPriceChangedEvent = plotPriceChangedEventMatch.decode(landSaleEvent.args);
+      plotEntities = await handlePlotPriceChangedEvents(
+        ctx,
+        plotPriceChangedEvent,
         landSaleEvent,
         plotEntities,
       );
@@ -407,7 +424,7 @@ const handleOfferCancelledEvents = async (
   offerCancelledEvent: OfferCancelled0Event,
 ): Promise<PlotOffer> => {
   const { plotId, price, buyer } = offerCancelledEvent;
-  const plotIdStr = String(plotId);
+  const plotIdStr = plotId.toString();
   const offerId = `${plotIdStr}-${buyer}-${price.toString()}`;
   const existingOffer = await ctx.store.get(PlotOffer, offerId);
   return (
@@ -420,6 +437,37 @@ const handleOfferCancelledEvents = async (
   );
 };
 
+const handlePlotPriceChangedEvents = async (
+  ctx: Context,
+  plotPriceChangedEvent: PlotPriceChanged0Event,
+  event: EvmLogEvent,
+  plotEntities: Plot[],
+): Promise<Plot[]> => {
+  const { plotId, newPrice } = plotPriceChangedEvent;
+  const plotIdStr = plotId.toString();
+
+  const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
+
+  const plot: Plot =
+    existingPlotIndex > -1
+      ? plotEntities[existingPlotIndex]
+      : (await ctx.store.get(Plot, plotIdStr)) ||
+        new Plot({
+          id: plotIdStr,
+          price: newPrice.toBigInt(),
+        });
+
+  plot.price = newPrice.toBigInt();
+
+  if (existingPlotIndex > -1) {
+    plotEntities[existingPlotIndex] = plot;
+  } else {
+    plotEntities.push(plot);
+  }
+
+  return plotEntities;
+};
+
 const handleLandTransferEvents = async (
   ctx: Context,
   plotTransferEvent: PlotTransferred0Event,
@@ -430,7 +478,7 @@ const handleLandTransferEvents = async (
 
   const { store } = ctx;
 
-  const plotIdStr = String(plotId);
+  const plotIdStr = plotId.toString();
   const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
 
   let plot =
