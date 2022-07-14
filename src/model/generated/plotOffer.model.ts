@@ -29,4 +29,8 @@ export class PlotOffer {
 
   @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: false})
   price!: bigint
+
+  @Index_()
+  @Column_("text", {nullable: false})
+  plotId!: string
 }

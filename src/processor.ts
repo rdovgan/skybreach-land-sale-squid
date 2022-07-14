@@ -243,6 +243,12 @@ const handlePlotListedEvents = async (
   const plotIdStr = plotId.toString();
   const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
 
+  // Remove offers on delist
+  if (!(plotListedEvent as PlotListed0Event)?.price) {
+    const offers = await ctx.store.find(PlotOffer, { where: { plotId: plotIdStr } });
+    await ctx.store.remove(offers);
+  }
+
   const plot: Plot =
     existingPlotIndex > -1
       ? plotEntities[existingPlotIndex]
@@ -382,6 +388,7 @@ const handleOfferMadeEvents = async (
     buyer,
     txnHash: event.evmTxHash,
     createdAt: new Date(),
+    plotId: plotIdStr,
   });
 
   if (existingPlotIndex > -1) {
@@ -408,6 +415,7 @@ const handleOfferCancelledEvents = async (
     new PlotOffer({
       id: offerId,
       price: BigInt(0),
+      plotId: plotIdStr,
     })
   );
 };

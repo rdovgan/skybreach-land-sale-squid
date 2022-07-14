@@ -5,6 +5,7 @@ type PlotOffer @entity {
   txnHash: String! @index
   createdAt: DateTime! @index
   price: BigInt!
+  plotId: String! @index
 }
 
 type LandSale @entity {
