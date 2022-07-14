@@ -32,5 +32,5 @@ export class PlotOffer {
 
   @Index_()
   @Column_("text", {nullable: false})
-  plotId!: string
+  parentPlotId!: string
 }
