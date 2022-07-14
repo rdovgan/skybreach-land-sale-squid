@@ -22,6 +22,7 @@ type LandSale @entity {
 type Plot @entity {
   id: ID!
   owner: String! @index
+  price: BigInt!
   sales: [LandSale!]  @derivedFrom(field: "plot")
   offers: [PlotOffer!]  @derivedFrom(field: "plot")
 }

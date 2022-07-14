@@ -16,6 +16,8 @@ import * as xcRMRKAbi from './abi/xcRMRK';
 import {
   OfferCancelled0Event,
   OfferMade0Event,
+  PlotDelisted0Event,
+  PlotListed0Event,
   PlotPurchased0Event,
   PlotsBought0Event,
   PlotTransferred0Event,
@@ -31,6 +33,8 @@ const LAND_SALE_EVENTS = {
   plotTransfer: landSalesAbi.events['PlotTransferred(uint256,address,address)'],
   offerMade: landSalesAbi.events['OfferMade(uint256,address,uint256)'],
   offerCancelled: landSalesAbi.events['OfferCancelled(uint256,address,uint256)'],
+  plotListedForSale: landSalesAbi.events['PlotListed(uint256,address,uint256)'],
+  plotDeListedForSale: landSalesAbi.events['PlotDelisted(uint256,address)'],
 };
 
 const LAND_SALE_EVENTS_OLD = {
@@ -39,6 +43,8 @@ const LAND_SALE_EVENTS_OLD = {
   plotTransfer: landSalesOldAbi.events['PlotTransferred(uint256,address,address)'],
   offerMade: landSalesOldAbi.events['OfferMade(uint256,address,uint256)'],
   offerCancelled: landSalesOldAbi.events['OfferCancelled(uint256,address,uint256)'],
+  plotListedForSale: landSalesAbi.events['PlotListed(uint256,address,uint256)'],
+  plotDeListedForSale: landSalesAbi.events['PlotDelisted(uint256,address)'],
 };
 
 const XCRMRK_TRANSFER_EVENT = xcRMRKAbi.events['Transfer(address,address,uint256)'];
@@ -189,12 +195,71 @@ const saveEntities = async (
         plotOffers.splice(offerToRemoveIndex, 1);
       }
     }
+
+    const plotListedEventMatch = [
+      LAND_SALE_EVENTS.plotListedForSale,
+      LAND_SALE_EVENTS_OLD.plotListedForSale,
+    ].find((plotListedTopics) => plotListedTopics.topic === topic);
+    if (plotListedEventMatch) {
+      const plotListedEvent = plotListedEventMatch.decode(landSaleEvent.args);
+      plotEntities = await handlePlotListedEvents(
+        ctx,
+        plotListedEvent,
+        landSaleEvent,
+        plotEntities,
+      );
+    }
+
+    const plotDeListedEventMatch = [
+      LAND_SALE_EVENTS.plotDeListedForSale,
+      LAND_SALE_EVENTS_OLD.plotDeListedForSale,
+    ].find((plotDeListedTopics) => plotDeListedTopics.topic === topic);
+    if (plotDeListedEventMatch) {
+      const plotDeListedEvent = plotDeListedEventMatch.decode(landSaleEvent.args);
+      plotEntities = await handlePlotListedEvents(
+        ctx,
+        plotDeListedEvent,
+        landSaleEvent,
+        plotEntities,
+      );
+    }
   }
 
   await ctx.store.save(plotEntities);
   await ctx.store.save(landSales);
   await ctx.store.save(plotOffers);
   await ctx.store.remove(offersToRemove);
+};
+
+const handlePlotListedEvents = async (
+  ctx: Context,
+  plotListedEvent: PlotListed0Event | PlotDelisted0Event,
+  event: EvmLogEvent,
+  plotEntities: Plot[],
+): Promise<Plot[]> => {
+  const { seller, plotId } = plotListedEvent;
+
+  const { store } = ctx;
+  const plotIdStr = plotId.toString();
+  const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
+
+  const plot: Plot =
+    existingPlotIndex > -1
+      ? plotEntities[existingPlotIndex]
+      : (await store.get(Plot, plotIdStr)) ||
+        new Plot({
+          id: plotIdStr,
+        });
+  plot.owner = seller;
+  plot.price = (plotListedEvent as PlotListed0Event)?.price?.toBigInt() || BigInt(0);
+
+  if (existingPlotIndex > -1) {
+    plotEntities[existingPlotIndex] = plot;
+  } else {
+    plotEntities.push(plot);
+  }
+
+  return plotEntities;
 };
 
 const handlePrimarySaleEvents = async (
@@ -216,6 +281,7 @@ const handlePrimarySaleEvents = async (
       plot = new Plot({
         id: plotIdStr,
         owner: buyer,
+        price: BigInt(0),
       });
     } else {
       plot.owner = buyer;
@@ -261,6 +327,7 @@ const handleSecondarySaleEvents = async (
           id: plotIdStr,
         });
   plot.owner = buyer;
+  plot.price = BigInt(0);
 
   const sale = new LandSale({
     id: `${plotIdStr}-${event.evmTxHash}`,
@@ -305,6 +372,7 @@ const handleOfferMadeEvents = async (
       : (await store.get(Plot, plotIdStr)) ||
         new Plot({
           id: plotIdStr,
+          price: BigInt(0),
         });
 
   const offer = new PlotOffer({
@@ -339,6 +407,7 @@ const handleOfferCancelledEvents = async (
     existingOffer ||
     new PlotOffer({
       id: offerId,
+      price: BigInt(0),
     })
   );
 };
@@ -362,6 +431,7 @@ const handleLandTransferEvents = async (
     plot = new Plot({
       id: plotIdStr,
       owner: newOwner,
+      price: BigInt(0),
     });
   } else {
     plot.owner = newOwner;

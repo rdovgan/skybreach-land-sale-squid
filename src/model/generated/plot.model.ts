@@ -1,4 +1,5 @@
 import {Entity as Entity_, Column as Column_, PrimaryColumn as PrimaryColumn_, Index as Index_, OneToMany as OneToMany_} from "typeorm"
+import * as marshal from "./marshal"
 import {LandSale} from "./landSale.model"
 import {PlotOffer} from "./plotOffer.model"
 
@@ -14,6 +15,9 @@ export class Plot {
   @Index_()
   @Column_("text", {nullable: false})
   owner!: string
+
+  @Column_("numeric", {transformer: marshal.bigintTransformer, nullable: false})
+  price!: bigint
 
   @OneToMany_(() => LandSale, e => e.plot)
   sales!: LandSale[]
