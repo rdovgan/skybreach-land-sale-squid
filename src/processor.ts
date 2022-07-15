@@ -8,7 +8,7 @@ import {
   SubstrateBatchProcessor,
 } from '@subsquid/substrate-processor';
 import { AddressZero } from '@ethersproject/constants';
-import { CHAIN_NODE } from './contract';
+import { CHAIN_NODE, contractNew, contractOld, contractXcRMRK, isMoonbaseAlpha } from './contract';
 import { LandSale, Plot, PlotOffer } from './model';
 import * as landSalesAbi from './abi/landSales';
 import * as landSalesOldAbi from './abi/landSaleOld';
@@ -23,10 +23,6 @@ import {
   PlotsBought0Event,
   PlotTransferred0Event,
 } from './abi/landSales';
-
-const contractOld = '0x98af019cdf16990130cba555861046b02e9898cc'.toLowerCase();
-const contractNew = '0x913a3e067a559ba24a7a06a6cdea4837eeeaf72d'.toLowerCase();
-const contractXcRMRK = '0xffffffff893264794d9d57e1e0e21e0042af5a0a'.toLowerCase();
 
 const LAND_SALE_EVENTS = {
   primarySale: landSalesAbi.events['PlotsBought(uint256[],address,address,bool)'],
@@ -58,7 +54,7 @@ const processor = new SubstrateBatchProcessor()
   .setBlockRange({ from: 2039880 })
   .setDataSource({
     chain: CHAIN_NODE,
-    archive: lookupArchive('moonriver', { release: 'FireSquid' }),
+    archive: lookupArchive(isMoonbaseAlpha ? 'moonbase' : 'moonriver', { release: 'FireSquid' }),
   })
   .setTypesBundle('moonbeam')
   .addEvmLog(contractOld, {
