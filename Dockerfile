@@ -5,7 +5,6 @@ RUN apk add --no-cache --virtual .build-deps alpine-sdk python3
 
 FROM node-with-gyp AS builder
 WORKDIR /squid
-ENV IS_MOONBASE_ALPHA=true
 ADD package.json .
 ADD yarn.lock .
 RUN yarn install
