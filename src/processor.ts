@@ -1,12 +1,17 @@
-import {BigNumber} from 'ethers';
-import {lookupArchive} from '@subsquid/archive-registry';
-import {Store, TypeormDatabase} from '@subsquid/typeorm-store';
-import {BatchContext, BatchProcessorItem, EvmLogEvent, SubstrateBatchProcessor,} from '@subsquid/substrate-processor';
-import {AddressZero} from '@ethersproject/constants';
-import {CHAIN_NODE, contractNew, contractOld, contractXcRMRK, isMoonbaseAlpha} from './contract';
-import {LandSale, Plot, PlotOffer} from './model';
+import { BigNumber } from 'ethers';
+import { lookupArchive } from '@subsquid/archive-registry';
+import { Store, TypeormDatabase } from '@subsquid/typeorm-store';
+import {
+  BatchContext,
+  BatchProcessorItem,
+  EvmLogEvent,
+  SubstrateBatchProcessor,
+} from '@subsquid/substrate-processor';
+import { AddressZero } from '@ethersproject/constants';
+import { CHAIN_NODE, contractNew, contractOld, contractXcRMRK, isMoonbaseAlpha } from './contract';
+import { LandSale, Plot, PlotOffer } from './model';
 import * as landSalesAbi from './abi/landSales';
-import {PlotListed0Event} from './abi/landSales';
+import { PlotListed0Event } from './abi/landSales';
 import * as landSalesOldAbi from './abi/landSaleOld';
 import * as xcRMRKAbi from './abi/xcRMRK';
 
@@ -94,58 +99,51 @@ async function processBatches(ctx: Context) {
 }
 
 const getPrimarySaleEvent = (topic: string) => {
-  return [
-    LAND_SALE_EVENTS.primarySale,
-    LAND_SALE_EVENTS_OLD.primarySale,
-  ].find((primarySaleTopics) => primarySaleTopics.topic === topic);
+  return [LAND_SALE_EVENTS.primarySale, LAND_SALE_EVENTS_OLD.primarySale].find(
+    (primarySaleTopics) => primarySaleTopics.topic === topic,
+  );
 };
 
 const getSecondarySaleEvent = (topic: string) => {
-  return [
-    LAND_SALE_EVENTS.secondarySale,
-    LAND_SALE_EVENTS_OLD.secondarySale,
-  ].find((secondarySaleTopics) => secondarySaleTopics.topic === topic);
+  return [LAND_SALE_EVENTS.secondarySale, LAND_SALE_EVENTS_OLD.secondarySale].find(
+    (secondarySaleTopics) => secondarySaleTopics.topic === topic,
+  );
 };
 
 const getPlotTransferEvent = (topic: string) => {
-  return [
-    LAND_SALE_EVENTS.plotTransfer,
-    LAND_SALE_EVENTS_OLD.plotTransfer,
-  ].find((plotTransferTopics) => plotTransferTopics.topic === topic);
+  return [LAND_SALE_EVENTS.plotTransfer, LAND_SALE_EVENTS_OLD.plotTransfer].find(
+    (plotTransferTopics) => plotTransferTopics.topic === topic,
+  );
 };
 
 const getOfferMadeEvent = (topic: string) => {
   return [LAND_SALE_EVENTS.offerMade, LAND_SALE_EVENTS_OLD.offerMade].find(
-      (offerMadeTopics) => offerMadeTopics.topic === topic,
+    (offerMadeTopics) => offerMadeTopics.topic === topic,
   );
 };
 
 const getOfferCancelledEvent = (topic: string) => {
-  return [
-    LAND_SALE_EVENTS.offerCancelled,
-    LAND_SALE_EVENTS_OLD.offerCancelled,
-  ].find((offerCancelledTopics) => offerCancelledTopics.topic === topic);
+  return [LAND_SALE_EVENTS.offerCancelled, LAND_SALE_EVENTS_OLD.offerCancelled].find(
+    (offerCancelledTopics) => offerCancelledTopics.topic === topic,
+  );
 };
 
 const getPlotListedEvent = (topic: string) => {
-  return [
-    LAND_SALE_EVENTS.plotListedForSale,
-    LAND_SALE_EVENTS_OLD.plotListedForSale,
-  ].find((plotListedTopics) => plotListedTopics.topic === topic);
+  return [LAND_SALE_EVENTS.plotListedForSale, LAND_SALE_EVENTS_OLD.plotListedForSale].find(
+    (plotListedTopics) => plotListedTopics.topic === topic,
+  );
 };
 
 const getPlotDelistedEvent = (topic: string) => {
-  return [
-    LAND_SALE_EVENTS.plotDeListedForSale,
-    LAND_SALE_EVENTS_OLD.plotDeListedForSale,
-  ].find((plotDeListedTopics) => plotDeListedTopics.topic === topic);
+  return [LAND_SALE_EVENTS.plotDeListedForSale, LAND_SALE_EVENTS_OLD.plotDeListedForSale].find(
+    (plotDeListedTopics) => plotDeListedTopics.topic === topic,
+  );
 };
 
 const getPriceChangeEvent = (topic: string) => {
-  return [
-    LAND_SALE_EVENTS.plotPriceChanged,
-    LAND_SALE_EVENTS_OLD.plotPriceChanged,
-  ].find((plotPriceChangedTopics) => plotPriceChangedTopics.topic === topic);
+  return [LAND_SALE_EVENTS.plotPriceChanged, LAND_SALE_EVENTS_OLD.plotPriceChanged].find(
+    (plotPriceChangedTopics) => plotPriceChangedTopics.topic === topic,
+  );
 };
 
 const saveEntities = async (

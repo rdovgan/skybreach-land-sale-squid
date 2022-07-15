@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import * as landSalesAbi from './abi/landSales';
 
-export const isMoonbaseAlpha = true;
+export const isMoonbaseAlpha = process.env.IS_MOONBASE_ALPHA || false;
 
 export const contractOld = isMoonbaseAlpha
   ? '0x17F7718b7748D89dd98540B50ef049af1a9b99C5'.toLowerCase()
