@@ -396,8 +396,15 @@ const handleOfferMadeEvents = async (
           owner: AddressZero,
         });
 
+  let offerId = `${plotIdStr}-${buyer}-${price.toString()}`;
+  const existingOffer = await ctx.store.find(PlotOffer, {where: {id: offerId}});
+
+  if (existingOffer.length > 0) {
+    offerId = `${offerId}-${existingOffer.length}`
+  }
+
   const offer = new PlotOffer({
-    id: `${plotIdStr}-${buyer}-${price.toString()}`,
+    id: offerId,
     price: price.toBigInt(),
     plot,
     buyer,
