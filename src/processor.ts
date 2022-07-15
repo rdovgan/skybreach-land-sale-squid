@@ -51,7 +51,7 @@ const XCRMRK_TRANSFER_EVENT = xcRMRKAbi.events['Transfer(address,address,uint256
 const database = new TypeormDatabase();
 const processor = new SubstrateBatchProcessor()
   .setBatchSize(500)
-  .setBlockRange({ from: isMoonbaseAlpha ? 2442274 : 2039880 })
+  .setBlockRange({ from: isMoonbaseAlpha ? 2309113 : 2039880 })
   .setDataSource({
     chain: CHAIN_NODE,
     archive: lookupArchive(isMoonbaseAlpha ? 'moonbase' : 'moonriver', { release: 'FireSquid' }),
