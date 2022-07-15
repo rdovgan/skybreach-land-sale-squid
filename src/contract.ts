@@ -14,7 +14,7 @@ export const contractXcRMRK = isMoonbaseAlpha
   : '0xffffffff893264794d9d57e1e0e21e0042af5a0a'.toLowerCase();
 
 export const CHAIN_NODE = isMoonbaseAlpha
-  ? 'https://rpc.api.moonbase.moonbeam.network'
+  ? 'wss://wss.api.moonbase.moonbeam.network'
   : 'wss://wss.api.moonriver.moonbeam.network';
 
 export const contract = new ethers.Contract(

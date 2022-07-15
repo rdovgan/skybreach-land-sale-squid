@@ -51,7 +51,7 @@ const XCRMRK_TRANSFER_EVENT = xcRMRKAbi.events['Transfer(address,address,uint256
 const database = new TypeormDatabase();
 const processor = new SubstrateBatchProcessor()
   .setBatchSize(500)
-  .setBlockRange({ from: 2039880 })
+  .setBlockRange({ from: isMoonbaseAlpha ? 2442274 : 2039880 })
   .setDataSource({
     chain: CHAIN_NODE,
     archive: lookupArchive(isMoonbaseAlpha ? 'moonbase' : 'moonriver', { release: 'FireSquid' }),
@@ -269,6 +269,7 @@ const handlePlotListedEvents = async (
         new Plot({
           id: plotIdStr,
         });
+
   plot.owner = seller;
   plot.price = (plotListedEvent as PlotListed0Event)?.price?.toBigInt() || BigInt(0);
 
@@ -296,6 +297,7 @@ const handlePrimarySaleEvents = async (
   for (const plotId of plotIds) {
     const plotIdStr = plotId.toString();
     let plot = await store.get(Plot, plotIdStr);
+
     if (!plot) {
       plot = new Plot({
         id: plotIdStr,
@@ -384,7 +386,6 @@ const handleOfferMadeEvents = async (
 
   const plotIdStr = plotId.toString();
   const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
-
   const plot: Plot =
     existingPlotIndex > -1
       ? plotEntities[existingPlotIndex]
@@ -392,6 +393,7 @@ const handleOfferMadeEvents = async (
         new Plot({
           id: plotIdStr,
           price: BigInt(0),
+          owner: AddressZero,
         });
 
   const offer = new PlotOffer({
