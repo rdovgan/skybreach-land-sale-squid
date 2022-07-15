@@ -278,6 +278,12 @@ const handleSecondarySaleEvents = async (ctx: Context, event: EvmLogEvent) => {
       createdAt: new Date(),
     });
 
+    // Remove offers on delist
+    const offers = await ctx.store.find(PlotOffer, { where: { parentPlotId: plotIdStr } });
+    if (offers.length > 0) {
+      await ctx.store.remove(offers);
+    }
+
     await ctx.store.save(plot);
     await ctx.store.save(sale);
   }
