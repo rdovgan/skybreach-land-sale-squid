@@ -1,66 +1,24 @@
-import { Store } from "@subsquid/typeorm-store";
-import { ethers } from "ethers";
-import * as erc721 from "./abi/erc721";
-import { Contract } from "./model";
+import { ethers } from 'ethers';
+import * as landSalesAbi from './abi/landSales';
 
-export const CHAIN_NODE = "wss://wss.api.moonriver.moonbeam.network";
+export const isMoonbaseAlpha = process.env.IS_MOONBASE_ALPHA || false;
+
+export const contractOld = isMoonbaseAlpha
+  ? '0x17F7718b7748D89dd98540B50ef049af1a9b99C5'.toLowerCase()
+  : '0x98af019cdf16990130cba555861046b02e9898cc'.toLowerCase();
+export const contractNew = isMoonbaseAlpha
+  ? '0x42B7f13F309a5bf55dC4f358561cBcC8aCdb0164'.toLowerCase()
+  : '0x913a3e067a559ba24a7a06a6cdea4837eeeaf72d'.toLowerCase();
+export const contractXcRMRK = isMoonbaseAlpha
+  ? '0x3Ff3B0361B450E70729006918c14DEb6Da410349'.toLowerCase()
+  : '0xffffffff893264794d9d57e1e0e21e0042af5a0a'.toLowerCase();
+
+export const CHAIN_NODE = isMoonbaseAlpha
+  ? 'https://rpc.api.moonbase.moonbeam.network'
+  : 'wss://wss.api.moonriver.moonbeam.network';
 
 export const contract = new ethers.Contract(
-  "0xb654611f84a8dc429ba3cb4fda9fad236c505a1a",
-  erc721.abi,
-  new ethers.providers.WebSocketProvider(CHAIN_NODE)
+  contractNew,
+  landSalesAbi.abi,
+  new ethers.providers.WebSocketProvider(CHAIN_NODE),
 );
-
-export function createContractEntity(): Contract {
-  return new Contract({
-    id: contract.address,
-    name: "Moonsama",
-    symbol: "MSAMA",
-    totalSupply: 1000n,
-  });
-}
-
-let contractEntity: Contract | undefined;
-
-export async function getContractEntity(store: Store): Promise<Contract> {
-  if (contractEntity == null) {
-    contractEntity = await store.get(Contract, contract.address);
-    if (contractEntity == null) {
-      contractEntity = createContractEntity();
-      await store.insert(contractEntity);
-    }
-  }
-  return contractEntity;
-}
-
-export async function getTokenURI(tokenId: string): Promise<string> {
-  return retry(async () => timeout(contract.tokenURI(tokenId)));
-}
-
-async function timeout<T>(res: Promise<T>, seconds = 30): Promise<T> {
-  return new Promise((resolve, reject) => {
-    let timer: NodeJS.Timeout|undefined = setTimeout(() => {
-      timer = undefined;
-      reject(new Error(`Request timed out in ${seconds} seconds`));
-    }, seconds * 1000);
-
-    res
-      .finally(() => {
-        if (timer != null) {
-          clearTimeout(timer);
-        }
-      })
-      .then(resolve, reject);
-  });
-}
-
-async function retry<T>(promiseFn: () => Promise<T>, attempts = 3): Promise<T> {
-  for (let i = 0; i < attempts; i+=1) {
-    try {
-      return await promiseFn();
-    } catch (err) {
-      console.log(err);
-    }
-  }
-  throw new Error(`Error after ${attempts} attempts`);
-}
