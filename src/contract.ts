@@ -1,5 +1,3 @@
-require('dotenv/config');
-
 import { ethers } from 'ethers';
 import * as landSalesAbi from './abi/landSales';
 
