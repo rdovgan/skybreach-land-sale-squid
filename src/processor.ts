@@ -1,3 +1,5 @@
+require('dotenv/config');
+
 import { BigNumber } from 'ethers';
 import { lookupArchive } from '@subsquid/archive-registry';
 import { Store, TypeormDatabase } from '@subsquid/typeorm-store';
