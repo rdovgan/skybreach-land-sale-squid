@@ -1,28 +1,14 @@
-import { BigNumber } from 'ethers';
-import { lookupArchive } from '@subsquid/archive-registry';
-import { Store, TypeormDatabase } from '@subsquid/typeorm-store';
-import {
-  BatchContext,
-  BatchProcessorItem,
-  EvmLogEvent,
-  SubstrateBatchProcessor,
-} from '@subsquid/substrate-processor';
-import { AddressZero } from '@ethersproject/constants';
-import { CHAIN_NODE, contractNew, contractOld, contractXcRMRK, isMoonbaseAlpha } from './contract';
-import { LandSale, Plot, PlotOffer } from './model';
+import {BigNumber} from 'ethers';
+import {lookupArchive} from '@subsquid/archive-registry';
+import {Store, TypeormDatabase} from '@subsquid/typeorm-store';
+import {BatchContext, BatchProcessorItem, EvmLogEvent, SubstrateBatchProcessor,} from '@subsquid/substrate-processor';
+import {AddressZero} from '@ethersproject/constants';
+import {CHAIN_NODE, contractNew, contractOld, contractXcRMRK, isMoonbaseAlpha} from './contract';
+import {LandSale, Plot, PlotOffer} from './model';
 import * as landSalesAbi from './abi/landSales';
+import {PlotListed0Event} from './abi/landSales';
 import * as landSalesOldAbi from './abi/landSaleOld';
 import * as xcRMRKAbi from './abi/xcRMRK';
-import {
-  OfferCancelled0Event,
-  OfferMade0Event,
-  PlotDelisted0Event,
-  PlotListed0Event,
-  PlotPriceChanged0Event,
-  PlotPurchased0Event,
-  PlotsBought0Event,
-  PlotTransferred0Event,
-} from './abi/landSales';
 
 const LAND_SALE_EVENTS = {
   primarySale: landSalesAbi.events['PlotsBought(uint256[],address,address,bool)'],
@@ -107,404 +93,306 @@ async function processBatches(ctx: Context) {
   await saveEntities(ctx, landSaleEvents, xcRmrkTransferValues);
 }
 
+const getPrimarySaleEvent = (topic: string) => {
+  return [
+    LAND_SALE_EVENTS.primarySale,
+    LAND_SALE_EVENTS_OLD.primarySale,
+  ].find((primarySaleTopics) => primarySaleTopics.topic === topic);
+};
+
+const getSecondarySaleEvent = (topic: string) => {
+  return [
+    LAND_SALE_EVENTS.secondarySale,
+    LAND_SALE_EVENTS_OLD.secondarySale,
+  ].find((secondarySaleTopics) => secondarySaleTopics.topic === topic);
+};
+
+const getPlotTransferEvent = (topic: string) => {
+  return [
+    LAND_SALE_EVENTS.plotTransfer,
+    LAND_SALE_EVENTS_OLD.plotTransfer,
+  ].find((plotTransferTopics) => plotTransferTopics.topic === topic);
+};
+
+const getOfferMadeEvent = (topic: string) => {
+  return [LAND_SALE_EVENTS.offerMade, LAND_SALE_EVENTS_OLD.offerMade].find(
+      (offerMadeTopics) => offerMadeTopics.topic === topic,
+  );
+};
+
+const getOfferCancelledEvent = (topic: string) => {
+  return [
+    LAND_SALE_EVENTS.offerCancelled,
+    LAND_SALE_EVENTS_OLD.offerCancelled,
+  ].find((offerCancelledTopics) => offerCancelledTopics.topic === topic);
+};
+
+const getPlotListedEvent = (topic: string) => {
+  return [
+    LAND_SALE_EVENTS.plotListedForSale,
+    LAND_SALE_EVENTS_OLD.plotListedForSale,
+  ].find((plotListedTopics) => plotListedTopics.topic === topic);
+};
+
+const getPlotDelistedEvent = (topic: string) => {
+  return [
+    LAND_SALE_EVENTS.plotDeListedForSale,
+    LAND_SALE_EVENTS_OLD.plotDeListedForSale,
+  ].find((plotDeListedTopics) => plotDeListedTopics.topic === topic);
+};
+
+const getPriceChangeEvent = (topic: string) => {
+  return [
+    LAND_SALE_EVENTS.plotPriceChanged,
+    LAND_SALE_EVENTS_OLD.plotPriceChanged,
+  ].find((plotPriceChangedTopics) => plotPriceChangedTopics.topic === topic);
+};
+
 const saveEntities = async (
   ctx: Context,
   landSaleEvents: EvmLogEvent[],
   xcRmrkTransferEvents: Record<string, BigNumber>,
 ) => {
-  let landSales: LandSale[] = [];
-  let plotEntities: Plot[] = [];
-  let plotOffers: PlotOffer[] = [];
-  const offersToRemove: PlotOffer[] = [];
-
   for (const landSaleEvent of landSaleEvents) {
-    const topic = landSaleEvent.args.topics[0];
-
     const tokenTransferValue = xcRmrkTransferEvents[landSaleEvent.evmTxHash];
-
-    const primarySalesEventMatch = [
-      LAND_SALE_EVENTS.primarySale,
-      LAND_SALE_EVENTS_OLD.primarySale,
-    ].find((primarySaleTopics) => primarySaleTopics.topic === topic);
-    if (primarySalesEventMatch) {
-      const primarySalesEvent = primarySalesEventMatch.decode(landSaleEvent.args);
-      const primarySales = await handlePrimarySaleEvents(
-        ctx,
-        primarySalesEvent,
-        landSaleEvent,
-        tokenTransferValue || BigNumber.from(0),
-      );
-      landSales = landSales.concat(primarySales.landSales);
-      plotEntities = plotEntities.concat(primarySales.plotEntities);
-    }
-
-    const secondarySaleEventMatch = [
-      LAND_SALE_EVENTS.secondarySale,
-      LAND_SALE_EVENTS_OLD.secondarySale,
-    ].find((secondarySaleTopics) => secondarySaleTopics.topic === topic);
-    if (secondarySaleEventMatch) {
-      const secondarySalesEvent = secondarySaleEventMatch.decode(landSaleEvent.args);
-      const secondarySales = await handleSecondarySaleEvents(
-        ctx,
-        secondarySalesEvent,
-        landSaleEvent,
-        plotEntities,
-      );
-      plotEntities = secondarySales.plotEntities;
-      landSales = landSales.concat(secondarySales.landSales);
-    }
-
-    const plotTransferEventMatch = [
-      LAND_SALE_EVENTS.plotTransfer,
-      LAND_SALE_EVENTS_OLD.plotTransfer,
-    ].find((plotTransferTopics) => plotTransferTopics.topic === topic);
-    if (plotTransferEventMatch) {
-      const plotTransferEvent = plotTransferEventMatch.decode(landSaleEvent.args);
-      plotEntities = await handleLandTransferEvents(
-        ctx,
-        plotTransferEvent,
-        landSaleEvent,
-        plotEntities,
-      );
-    }
-
-    const offerMadeEventMatch = [LAND_SALE_EVENTS.offerMade, LAND_SALE_EVENTS_OLD.offerMade].find(
-      (offerMadeTopics) => offerMadeTopics.topic === topic,
-    );
-    if (offerMadeEventMatch) {
-      const offerMadeEvent = offerMadeEventMatch.decode(landSaleEvent.args);
-      const offers = await handleOfferMadeEvents(ctx, offerMadeEvent, landSaleEvent, plotEntities);
-      plotEntities = offers.plotEntities;
-      plotOffers = plotOffers.concat(offers.offers);
-    }
-
-    const offerCancelledEventMatch = [
-      LAND_SALE_EVENTS.offerCancelled,
-      LAND_SALE_EVENTS_OLD.offerCancelled,
-    ].find((offerCancelledTopics) => offerCancelledTopics.topic === topic);
-    if (offerCancelledEventMatch) {
-      const offerCancelledEvent = offerCancelledEventMatch.decode(landSaleEvent.args);
-      const offerToRemove = await handleOfferCancelledEvents(ctx, offerCancelledEvent);
-      if (offerToRemove) {
-        offersToRemove.push(offerToRemove);
-      }
-      const offerToRemoveIndex = plotOffers.findIndex((offer) => offer.id === offerToRemove.id);
-
-      if (offerToRemoveIndex > -1) {
-        plotOffers.splice(offerToRemoveIndex, 1);
-      }
-    }
-
-    const plotListedEventMatch = [
-      LAND_SALE_EVENTS.plotListedForSale,
-      LAND_SALE_EVENTS_OLD.plotListedForSale,
-    ].find((plotListedTopics) => plotListedTopics.topic === topic);
-    if (plotListedEventMatch) {
-      const plotListedEvent = plotListedEventMatch.decode(landSaleEvent.args);
-      plotEntities = await handlePlotListedEvents(
-        ctx,
-        plotListedEvent,
-        landSaleEvent,
-        plotEntities,
-      );
-    }
-
-    const plotDeListedEventMatch = [
-      LAND_SALE_EVENTS.plotDeListedForSale,
-      LAND_SALE_EVENTS_OLD.plotDeListedForSale,
-    ].find((plotDeListedTopics) => plotDeListedTopics.topic === topic);
-    if (plotDeListedEventMatch) {
-      const plotDeListedEvent = plotDeListedEventMatch.decode(landSaleEvent.args);
-      plotEntities = await handlePlotListedEvents(
-        ctx,
-        plotDeListedEvent,
-        landSaleEvent,
-        plotEntities,
-      );
-    }
-
-    const plotPriceChangedEventMatch = [
-      LAND_SALE_EVENTS.plotPriceChanged,
-      LAND_SALE_EVENTS_OLD.plotPriceChanged,
-    ].find((plotPriceChangedTopics) => plotPriceChangedTopics.topic === topic);
-    if (plotPriceChangedEventMatch) {
-      const plotPriceChangedEvent = plotPriceChangedEventMatch.decode(landSaleEvent.args);
-      plotEntities = await handlePlotPriceChangedEvents(
-        ctx,
-        plotPriceChangedEvent,
-        landSaleEvent,
-        plotEntities,
-      );
-    }
+    await handlePrimarySaleEvents(ctx, landSaleEvent, tokenTransferValue || BigNumber.from(0));
+    await handleSecondarySaleEvents(ctx, landSaleEvent);
+    await handleLandTransferEvents(ctx, landSaleEvent);
+    await handleOfferMadeEvents(ctx, landSaleEvent);
+    await handleOfferCancelledEvents(ctx, landSaleEvent);
+    await handlePlotListedEvents(ctx, landSaleEvent);
+    await handlePlotPriceChangedEvents(ctx, landSaleEvent);
   }
-
-  await ctx.store.save(plotEntities);
-  await ctx.store.save(landSales);
-  await ctx.store.save(plotOffers);
-  await ctx.store.remove(offersToRemove);
 };
 
-const handlePlotListedEvents = async (
-  ctx: Context,
-  plotListedEvent: PlotListed0Event | PlotDelisted0Event,
-  event: EvmLogEvent,
-  plotEntities: Plot[],
-): Promise<Plot[]> => {
-  const { seller, plotId } = plotListedEvent;
+const handlePlotListedEvents = async (ctx: Context, event: EvmLogEvent) => {
+  const topic = event.args.topics[0];
+  const plotListedEventMatch = getPlotListedEvent(topic);
+  const plotDelistedEventMatch = getPlotDelistedEvent(topic);
 
-  const { store } = ctx;
-  const plotIdStr = plotId.toString();
-  const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
+  const listedDelistedEventMatch = plotDelistedEventMatch || plotListedEventMatch;
 
-  // Remove offers on delist
-  if (!(plotListedEvent as PlotListed0Event)?.price) {
-    const offers = await ctx.store.find(PlotOffer, { where: { parentPlotId: plotIdStr } });
-    await ctx.store.remove(offers);
+  if (listedDelistedEventMatch) {
+    const plotListedEvent = listedDelistedEventMatch.decode(event.args);
+    const { seller, plotId } = plotListedEvent;
+
+    const { store } = ctx;
+    const plotIdStr = plotId.toString();
+
+    // Remove offers on delist
+    if (plotDelistedEventMatch) {
+      const offers = await ctx.store.find(PlotOffer, { where: { parentPlotId: plotIdStr } });
+      await ctx.store.remove(offers);
+    }
+
+    const plot: Plot =
+      (await store.get(Plot, plotIdStr)) ||
+      new Plot({
+        id: plotIdStr,
+      });
+
+    plot.owner = seller;
+    plot.price = (plotListedEvent as PlotListed0Event)?.price?.toBigInt() || BigInt(0);
+
+    await ctx.store.save(plot);
   }
-
-  const plot: Plot =
-    existingPlotIndex > -1
-      ? plotEntities[existingPlotIndex]
-      : (await store.get(Plot, plotIdStr)) ||
-        new Plot({
-          id: plotIdStr,
-        });
-
-  plot.owner = seller;
-  plot.price = (plotListedEvent as PlotListed0Event)?.price?.toBigInt() || BigInt(0);
-
-  if (existingPlotIndex > -1) {
-    plotEntities[existingPlotIndex] = plot;
-  } else {
-    plotEntities.push(plot);
-  }
-
-  return plotEntities;
 };
 
 const handlePrimarySaleEvents = async (
   ctx: Context,
-  primarySalesEvent: PlotsBought0Event,
   event: EvmLogEvent,
   tokenTransferValue: BigNumber,
-): Promise<{ landSales: LandSale[]; plotEntities: Plot[] }> => {
-  const { boughtWithCredits, buyer, referrer, plotIds } = primarySalesEvent;
+) => {
+  const topic = event.args.topics[0];
+  const primarySalesEventMatch = getPrimarySaleEvent(topic);
 
-  const { store } = ctx;
-  const landSales: LandSale[] = [];
-  const plotEntities: Plot[] = [];
+  if (primarySalesEventMatch) {
+    const primarySalesEvent = primarySalesEventMatch.decode(event.args);
+    const { boughtWithCredits, buyer, referrer, plotIds } = primarySalesEvent;
 
-  for (const plotId of plotIds) {
-    const plotIdStr = plotId.toString();
-    let plot = await store.get(Plot, plotIdStr);
+    const { store } = ctx;
+    const landSales: LandSale[] = [];
+    const plotEntities: Plot[] = [];
 
-    if (!plot) {
-      plot = new Plot({
-        id: plotIdStr,
-        owner: buyer,
-        price: BigInt(0),
+    for (const plotId of plotIds) {
+      const plotIdStr = plotId.toString();
+      let plot = await store.get(Plot, plotIdStr);
+
+      if (!plot) {
+        plot = new Plot({
+          id: plotIdStr,
+          owner: buyer,
+          price: BigInt(0),
+        });
+      } else {
+        plot.owner = buyer;
+      }
+
+      const sale = new LandSale({
+        id: `${plotIdStr}-${event.evmTxHash}`,
+        plot,
+        buyer,
+        seller: AddressZero,
+        referrer: referrer || AddressZero,
+        price: boughtWithCredits ? BigInt(0) : tokenTransferValue.toBigInt(),
+        boughtWithCredits,
+        txnHash: event.evmTxHash,
+        createdAt: new Date(),
       });
-    } else {
-      plot.owner = buyer;
+
+      plotEntities.push(plot);
+      landSales.push(sale);
     }
+
+    await ctx.store.save(plotEntities);
+    await ctx.store.save(landSales);
+  }
+};
+
+const handleSecondarySaleEvents = async (ctx: Context, event: EvmLogEvent) => {
+  const topic = event.args.topics[0];
+  const secondarySaleEventMatch = getSecondarySaleEvent(topic);
+
+  if (secondarySaleEventMatch) {
+    const secondarySalesEvent = secondarySaleEventMatch.decode(event.args);
+    const { seller, buyer, price, plotId } = secondarySalesEvent;
+    const { store } = ctx;
+
+    const plotIdStr = plotId.toString();
+
+    const plot: Plot =
+      (await store.get(Plot, plotIdStr)) ||
+      new Plot({
+        id: plotIdStr,
+      });
+    plot.owner = buyer;
+    plot.price = BigInt(0);
 
     const sale = new LandSale({
       id: `${plotIdStr}-${event.evmTxHash}`,
       plot,
       buyer,
-      seller: AddressZero,
-      referrer: referrer || AddressZero,
-      price: boughtWithCredits ? BigInt(0) : tokenTransferValue.toBigInt(),
-      boughtWithCredits,
+      price: price.toBigInt(),
+      seller,
+      referrer: AddressZero,
+      boughtWithCredits: false,
       txnHash: event.evmTxHash,
       createdAt: new Date(),
     });
-    plotEntities.push(plot);
-    landSales.push(sale);
-  }
 
-  return { landSales, plotEntities };
+    await ctx.store.save(plot);
+    await ctx.store.save(sale);
+  }
 };
 
-const handleSecondarySaleEvents = async (
-  ctx: Context,
-  secondarySalesEvent: PlotPurchased0Event,
-  event: EvmLogEvent,
-  plotEntities: Plot[],
-): Promise<{ landSales: LandSale[]; plotEntities: Plot[] }> => {
-  const { seller, buyer, price, plotId } = secondarySalesEvent;
+const handleOfferMadeEvents = async (ctx: Context, event: EvmLogEvent) => {
+  const topic = event.args.topics[0];
+  const offerMadeEventMatch = getOfferMadeEvent(topic);
 
-  const { store } = ctx;
-  const landSales: LandSale[] = [];
+  if (offerMadeEventMatch) {
+    const offerMadeEvent = offerMadeEventMatch.decode(event.args);
+    const { plotId, price, buyer } = offerMadeEvent;
 
-  const plotIdStr = plotId.toString();
-  const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
+    const { store } = ctx;
 
-  const plot: Plot =
-    existingPlotIndex > -1
-      ? plotEntities[existingPlotIndex]
-      : (await store.get(Plot, plotIdStr)) ||
-        new Plot({
-          id: plotIdStr,
-        });
-  plot.owner = buyer;
-  plot.price = BigInt(0);
+    const plotIdStr = plotId.toString();
+    const plot: Plot =
+      (await store.get(Plot, plotIdStr)) ||
+      new Plot({
+        id: plotIdStr,
+        price: BigInt(0),
+        owner: AddressZero,
+      });
 
-  const sale = new LandSale({
-    id: `${plotIdStr}-${event.evmTxHash}`,
-    plot,
-    buyer,
-    price: price.toBigInt(),
-    seller,
-    referrer: AddressZero,
-    boughtWithCredits: false,
-    txnHash: event.evmTxHash,
-    createdAt: new Date(),
-  });
+    let offerId = `${plotIdStr}-${buyer}-${price.toString()}`;
 
-  if (existingPlotIndex > -1) {
-    plotEntities[existingPlotIndex] = plot;
-  } else {
-    plotEntities.push(plot);
-  }
-
-  landSales.push(sale);
-
-  return { landSales, plotEntities };
-};
-
-const handleOfferMadeEvents = async (
-  ctx: Context,
-  offerMadeEvent: OfferMade0Event,
-  event: EvmLogEvent,
-  plotEntities: Plot[],
-): Promise<{ offers: PlotOffer[]; plotEntities: Plot[] }> => {
-  const { plotId, price, buyer } = offerMadeEvent;
-
-  const { store } = ctx;
-  const offers: PlotOffer[] = [];
-
-  const plotIdStr = plotId.toString();
-  const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
-  const plot: Plot =
-    existingPlotIndex > -1
-      ? plotEntities[existingPlotIndex]
-      : (await store.get(Plot, plotIdStr)) ||
-        new Plot({
-          id: plotIdStr,
-          price: BigInt(0),
-          owner: AddressZero,
-        });
-
-  let offerId = `${plotIdStr}-${buyer}-${price.toString()}`;
-  const existingOffer = await ctx.store.find(PlotOffer, {where: {id: offerId}});
-
-  if (existingOffer.length > 0) {
-    offerId = `${offerId}-${existingOffer.length}`
-  }
-
-  const offer = new PlotOffer({
-    id: offerId,
-    price: price.toBigInt(),
-    plot,
-    buyer,
-    txnHash: event.evmTxHash,
-    createdAt: new Date(),
-    parentPlotId: plotIdStr,
-  });
-
-  if (existingPlotIndex > -1) {
-    plotEntities[existingPlotIndex] = plot;
-  } else {
-    plotEntities.push(plot);
-  }
-
-  offers.push(offer);
-
-  return { offers, plotEntities };
-};
-
-const handleOfferCancelledEvents = async (
-  ctx: Context,
-  offerCancelledEvent: OfferCancelled0Event,
-): Promise<PlotOffer> => {
-  const { plotId, price, buyer } = offerCancelledEvent;
-  const plotIdStr = plotId.toString();
-  const offerId = `${plotIdStr}-${buyer}-${price.toString()}`;
-  const existingOffer = await ctx.store.get(PlotOffer, offerId);
-  return (
-    existingOffer ||
-    new PlotOffer({
-      id: offerId,
-      price: BigInt(0),
-      parentPlotId: plotIdStr,
-    })
-  );
-};
-
-const handlePlotPriceChangedEvents = async (
-  ctx: Context,
-  plotPriceChangedEvent: PlotPriceChanged0Event,
-  event: EvmLogEvent,
-  plotEntities: Plot[],
-): Promise<Plot[]> => {
-  const { plotId, newPrice } = plotPriceChangedEvent;
-  const plotIdStr = plotId.toString();
-
-  const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
-
-  const plot: Plot =
-    existingPlotIndex > -1
-      ? plotEntities[existingPlotIndex]
-      : (await ctx.store.get(Plot, plotIdStr)) ||
-        new Plot({
-          id: plotIdStr,
-          price: newPrice.toBigInt(),
-        });
-
-  plot.price = newPrice.toBigInt();
-
-  if (existingPlotIndex > -1) {
-    plotEntities[existingPlotIndex] = plot;
-  } else {
-    plotEntities.push(plot);
-  }
-
-  return plotEntities;
-};
-
-const handleLandTransferEvents = async (
-  ctx: Context,
-  plotTransferEvent: PlotTransferred0Event,
-  event: EvmLogEvent,
-  plotEntities: Plot[],
-): Promise<Plot[]> => {
-  const { plotIds: plotId, newOwner } = plotTransferEvent;
-
-  const { store } = ctx;
-
-  const plotIdStr = plotId.toString();
-  const existingPlotIndex = plotEntities.findIndex((plotEntity) => plotEntity.id === plotIdStr);
-
-  let plot =
-    existingPlotIndex > -1 ? plotEntities[existingPlotIndex] : await store.get(Plot, plotIdStr);
-  if (!plot) {
-    plot = new Plot({
-      id: plotIdStr,
-      owner: newOwner,
-      price: BigInt(0),
+    const existingOffer = await ctx.store.find(PlotOffer, {
+      where: { buyer, price: price.toBigInt(), parentPlotId: plotIdStr },
     });
-  } else {
-    plot.owner = newOwner;
-  }
 
-  if (existingPlotIndex > -1) {
-    plotEntities[existingPlotIndex] = plot;
-  } else {
-    plotEntities.push(plot);
-  }
+    offerId = `${offerId}-${existingOffer.length + 1}`;
 
-  return plotEntities;
+    const offer = new PlotOffer({
+      id: offerId,
+      price: price.toBigInt(),
+      plot,
+      buyer,
+      txnHash: event.evmTxHash,
+      createdAt: new Date(),
+      parentPlotId: plotIdStr,
+    });
+
+    await ctx.store.save(plot);
+    await ctx.store.save(offer);
+  }
+};
+
+const handleOfferCancelledEvents = async (ctx: Context, event: EvmLogEvent) => {
+  const topic = event.args.topics[0];
+  const offerCancelledEventMatch = getOfferCancelledEvent(topic);
+
+  if (offerCancelledEventMatch) {
+    const offerCancelledEvent = offerCancelledEventMatch.decode(event.args);
+    const { plotId, price, buyer } = offerCancelledEvent;
+    const plotIdStr = plotId.toString();
+    const existingOffer = await ctx.store.find(PlotOffer, {
+      where: { buyer, price: price.toBigInt(), parentPlotId: plotIdStr },
+    });
+
+    const offerToRemove = existingOffer?.[existingOffer.length - 1];
+
+    if (offerToRemove) {
+      await ctx.store.remove(offerToRemove);
+    }
+  }
+};
+
+const handlePlotPriceChangedEvents = async (ctx: Context, event: EvmLogEvent) => {
+  const topic = event.args.topics[0];
+  const plotPriceChangedEventMatch = getPriceChangeEvent(topic);
+
+  if (plotPriceChangedEventMatch) {
+    const plotPriceChangedEvent = plotPriceChangedEventMatch.decode(event.args);
+    const { plotId, newPrice } = plotPriceChangedEvent;
+    const plotIdStr = plotId.toString();
+
+    const plot: Plot =
+      (await ctx.store.get(Plot, plotIdStr)) ||
+      new Plot({
+        id: plotIdStr,
+        price: newPrice.toBigInt(),
+      });
+
+    plot.price = newPrice.toBigInt();
+
+    await ctx.store.save(plot);
+  }
+};
+
+const handleLandTransferEvents = async (ctx: Context, event: EvmLogEvent) => {
+  const topic = event.args.topics[0];
+  const plotTransferEventMatch = getPlotTransferEvent(topic);
+
+  if (plotTransferEventMatch) {
+    const plotTransferEvent = plotTransferEventMatch.decode(event.args);
+    const { plotIds: plotId, newOwner } = plotTransferEvent;
+    const { store } = ctx;
+
+    const plotIdStr = plotId.toString();
+
+    let plot = await store.get(Plot, plotIdStr);
+    if (!plot) {
+      plot = new Plot({
+        id: plotIdStr,
+        owner: newOwner,
+        price: BigInt(0),
+      });
+    } else {
+      plot.owner = newOwner;
+    }
+
+    await ctx.store.save(plot);
+  }
 };
 
 processor.run(database, processBatches);
