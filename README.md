@@ -69,7 +69,7 @@ npx squid-typeorm-migration revert
 
 ### 4. Import ABI contract and generate interfaces to decode events
 
-It is necessary to import the respective ABI definition to decode EVM logs. For Moonsama transfers we use the standard ERC721 interface, see [`src/abis/ERC721.json`](src/abis/ERC721.json).
+It is necessary to import the respective ABI definition to decode EVM logs. For Moonsama transfers we use the standard ERC721 interface, see [`src/abi/ERC721.json`](src/abi/ERC721.json).
 
 To generate a type-safe facade class to decode EVM logs, use `squid-evm-typegen(1)`:
 
