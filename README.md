@@ -1,6 +1,19 @@
 # EVM squid template (FireSquid edition)
 
-This is a FireSquid version of the sample [squid](https://subsquid.io) showcasing EVM log indexing for substrate chains with a Frontier EVM pallete, like Astar or Moonbeam. This template indexes [Moonsama](https://moonsama.com/) token transfers over the [Moonriver network](https://moonbeam.network/networks/moonriver/) and serves them via graphql API.
+This is a FireSquid version of the sample [squid](https://subsquid.io) showcasing EVM log indexing for substrate chains with a Frontier EVM pallete, like Astar or Moonbeam. This template indexes [Skybreach](https://skybreach.app/) land sales events on the [Moonriver network](https://moonbeam.network/networks/moonriver/) and serves them via graphql API.
+
+## Making a schema change
+
+1. Edit `schema.graphql` and run `npx sqd codegen`
+2. run `make build`
+3. `make up`
+4. Optionally: If you want to test indexer locally you can now run `make process` and then `make serve` in a separate terminal tab for gql server
+5. Package everything using docker to deploy to Aquarium. `docker build . --target processor -t squid-processor`
+6. Push changes to appropriate branch in git. `#master` for prod and `#moonbase-alpha` for dev to tell Aquarium to build from git
+7. 
+   1. For DEV indexer run: `npx sqd squid update skybreach-dev-squid@v4 --hardReset --source "https://github.com/rmrk-team/skybreach-land-sale-squid#moonbase-alpha" -v`
+   2. For PROD run: `npx sqd squid update skybreach-land-squid@v3 --hardReset --source "https://github.com/rmrk-team/skybreach-land-sale-squid#master" -v`
+   3. if you are doing first time release (like a new version) replace `update` with `release` in squid command
 
 ## Quickstart
 
