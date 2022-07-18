@@ -63,7 +63,7 @@ const processor = new SubstrateBatchProcessor()
 type Item = BatchProcessorItem<typeof processor>;
 type Context = BatchContext<Store, Item>;
 
-type EvmLogEventWithTimestamp = EvmLogEvent & {timestamp: number}
+type EvmLogEventWithTimestamp = EvmLogEvent & { timestamp: number };
 
 async function processBatches(ctx: Context) {
   const xcRmrkTransferValues: Record<string, BigNumber> = {};
@@ -93,7 +93,7 @@ async function processBatches(ctx: Context) {
             .map((event) => event.topic)
             .includes(topic)
         ) {
-          landSaleEvents.push({...item.event, timestamp: block.header.timestamp});
+          landSaleEvents.push({ ...item.event, timestamp: block.header.timestamp });
         }
       }
     }
@@ -358,7 +358,12 @@ const handleOfferCancelledEvents = async (ctx: Context, event: EvmLogEventWithTi
     const offerToRemove = existingOffer?.[existingOffer.length - 1];
 
     if (offerToRemove) {
+      const plot = await ctx.store.get(Plot, offerToRemove.parentPlotId);
       offerToRemove.cancelled = true;
+      if (plot) {
+        offerToRemove.plot = plot;
+      }
+
       await ctx.store.save(offerToRemove);
     }
   }
