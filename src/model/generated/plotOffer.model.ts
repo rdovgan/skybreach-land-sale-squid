@@ -33,4 +33,7 @@ export class PlotOffer {
   @Index_()
   @Column_("text", {nullable: false})
   parentPlotId!: string
+
+  @Column_("bool", {nullable: false})
+  cancelled!: boolean
 }

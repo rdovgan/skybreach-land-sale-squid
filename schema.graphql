@@ -6,6 +6,7 @@ type PlotOffer @entity {
   createdAt: DateTime! @index
   price: BigInt!
   parentPlotId: String! @index
+  cancelled: Boolean!
 }
 
 type LandSale @entity {

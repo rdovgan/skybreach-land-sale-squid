@@ -24,6 +24,7 @@ const LAND_SALE_EVENTS = {
   plotListedForSale: landSalesAbi.events['PlotListed(uint256,address,uint256)'],
   plotDeListedForSale: landSalesAbi.events['PlotDelisted(uint256,address)'],
   plotPriceChanged: landSalesAbi.events['PlotPriceChanged(uint256,address,uint256,uint256)'],
+  escrowReturned: landSalesAbi.events['EscrowReturned(address,uint256)'],
 };
 
 const LAND_SALE_EVENTS_OLD = {
@@ -35,6 +36,7 @@ const LAND_SALE_EVENTS_OLD = {
   plotListedForSale: landSalesAbi.events['PlotListed(uint256,address,uint256)'],
   plotDeListedForSale: landSalesAbi.events['PlotDelisted(uint256,address)'],
   plotPriceChanged: landSalesAbi.events['PlotPriceChanged(uint256,address,uint256,uint256)'],
+  escrowReturned: landSalesAbi.events['EscrowReturned(address,uint256)'],
 };
 
 const XCRMRK_TRANSFER_EVENT = xcRMRKAbi.events['Transfer(address,address,uint256)'];
@@ -61,9 +63,11 @@ const processor = new SubstrateBatchProcessor()
 type Item = BatchProcessorItem<typeof processor>;
 type Context = BatchContext<Store, Item>;
 
+type EvmLogEventWithTimestamp = EvmLogEvent & {timestamp: number}
+
 async function processBatches(ctx: Context) {
   const xcRmrkTransferValues: Record<string, BigNumber> = {};
-  const landSaleEvents: EvmLogEvent[] = [];
+  const landSaleEvents: EvmLogEventWithTimestamp[] = [];
 
   for (const block of ctx.blocks) {
     for (const item of block.items) {
@@ -89,7 +93,7 @@ async function processBatches(ctx: Context) {
             .map((event) => event.topic)
             .includes(topic)
         ) {
-          landSaleEvents.push(item.event);
+          landSaleEvents.push({...item.event, timestamp: block.header.timestamp});
         }
       }
     }
@@ -146,9 +150,15 @@ const getPriceChangeEvent = (topic: string) => {
   );
 };
 
+const getEscrowReturnedEvent = (topic: string) => {
+  return [LAND_SALE_EVENTS.escrowReturned, LAND_SALE_EVENTS_OLD.escrowReturned].find(
+    (escrowReturnedTopics) => escrowReturnedTopics.topic === topic,
+  );
+};
+
 const saveEntities = async (
   ctx: Context,
-  landSaleEvents: EvmLogEvent[],
+  landSaleEvents: EvmLogEventWithTimestamp[],
   xcRmrkTransferEvents: Record<string, BigNumber>,
 ) => {
   for (const landSaleEvent of landSaleEvents) {
@@ -158,12 +168,13 @@ const saveEntities = async (
     await handleLandTransferEvents(ctx, landSaleEvent);
     await handleOfferMadeEvents(ctx, landSaleEvent);
     await handleOfferCancelledEvents(ctx, landSaleEvent);
+    await handleEscrowReturnedEvents(ctx, landSaleEvent);
     await handlePlotListedEvents(ctx, landSaleEvent);
     await handlePlotPriceChangedEvents(ctx, landSaleEvent);
   }
 };
 
-const handlePlotListedEvents = async (ctx: Context, event: EvmLogEvent) => {
+const handlePlotListedEvents = async (ctx: Context, event: EvmLogEventWithTimestamp) => {
   const topic = event.args.topics[0];
   const plotListedEventMatch = getPlotListedEvent(topic);
   const plotDelistedEventMatch = getPlotDelistedEvent(topic);
@@ -198,7 +209,7 @@ const handlePlotListedEvents = async (ctx: Context, event: EvmLogEvent) => {
 
 const handlePrimarySaleEvents = async (
   ctx: Context,
-  event: EvmLogEvent,
+  event: EvmLogEventWithTimestamp,
   tokenTransferValue: BigNumber,
 ) => {
   const topic = event.args.topics[0];
@@ -247,7 +258,7 @@ const handlePrimarySaleEvents = async (
   }
 };
 
-const handleSecondarySaleEvents = async (ctx: Context, event: EvmLogEvent) => {
+const handleSecondarySaleEvents = async (ctx: Context, event: EvmLogEventWithTimestamp) => {
   const topic = event.args.topics[0];
   const secondarySaleEventMatch = getSecondarySaleEvent(topic);
 
@@ -289,7 +300,7 @@ const handleSecondarySaleEvents = async (ctx: Context, event: EvmLogEvent) => {
   }
 };
 
-const handleOfferMadeEvents = async (ctx: Context, event: EvmLogEvent) => {
+const handleOfferMadeEvents = async (ctx: Context, event: EvmLogEventWithTimestamp) => {
   const topic = event.args.topics[0];
   const offerMadeEventMatch = getOfferMadeEvent(topic);
 
@@ -322,8 +333,9 @@ const handleOfferMadeEvents = async (ctx: Context, event: EvmLogEvent) => {
       plot,
       buyer,
       txnHash: event.evmTxHash,
-      createdAt: new Date(),
+      createdAt: new Date(event.timestamp),
       parentPlotId: plotIdStr,
+      cancelled: false,
     });
 
     await ctx.store.save(plot);
@@ -331,7 +343,7 @@ const handleOfferMadeEvents = async (ctx: Context, event: EvmLogEvent) => {
   }
 };
 
-const handleOfferCancelledEvents = async (ctx: Context, event: EvmLogEvent) => {
+const handleOfferCancelledEvents = async (ctx: Context, event: EvmLogEventWithTimestamp) => {
   const topic = event.args.topics[0];
   const offerCancelledEventMatch = getOfferCancelledEvent(topic);
 
@@ -346,12 +358,30 @@ const handleOfferCancelledEvents = async (ctx: Context, event: EvmLogEvent) => {
     const offerToRemove = existingOffer?.[existingOffer.length - 1];
 
     if (offerToRemove) {
-      await ctx.store.remove(offerToRemove);
+      offerToRemove.cancelled = true;
+      await ctx.store.save(offerToRemove);
     }
   }
 };
 
-const handlePlotPriceChangedEvents = async (ctx: Context, event: EvmLogEvent) => {
+const handleEscrowReturnedEvents = async (ctx: Context, event: EvmLogEventWithTimestamp) => {
+  const topic = event.args.topics[0];
+  const escrowReturnedEventMatch = getEscrowReturnedEvent(topic);
+
+  if (escrowReturnedEventMatch) {
+    const escrowReturnedEvent = escrowReturnedEventMatch.decode(event.args);
+    const { buyer, value } = escrowReturnedEvent;
+    const allOffersByBuyer = await ctx.store.find(PlotOffer, {
+      where: { buyer },
+    });
+
+    if (allOffersByBuyer.length > 0) {
+      await ctx.store.remove(allOffersByBuyer);
+    }
+  }
+};
+
+const handlePlotPriceChangedEvents = async (ctx: Context, event: EvmLogEventWithTimestamp) => {
   const topic = event.args.topics[0];
   const plotPriceChangedEventMatch = getPriceChangeEvent(topic);
 
@@ -373,7 +403,7 @@ const handlePlotPriceChangedEvents = async (ctx: Context, event: EvmLogEvent) =>
   }
 };
 
-const handleLandTransferEvents = async (ctx: Context, event: EvmLogEvent) => {
+const handleLandTransferEvents = async (ctx: Context, event: EvmLogEventWithTimestamp) => {
   const topic = event.args.topics[0];
   const plotTransferEventMatch = getPlotTransferEvent(topic);
 
