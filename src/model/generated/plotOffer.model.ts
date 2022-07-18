@@ -34,6 +34,6 @@ export class PlotOffer {
   @Column_("text", {nullable: false})
   parentPlotId!: string
 
-  @Column_("bool", {nullable: false})
-  cancelled!: boolean
+  @Column_("bool", {nullable: true})
+  cancelled!: boolean | undefined | null
 }
